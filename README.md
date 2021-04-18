@@ -1,9 +1,50 @@
 # Python-stock-investment-automation
 유튜브 조코딩님의 파이썬 주식 투자 자동화
 
+전략
+
+- 변동성 돌파 전략 - Larry R. Williams
+
+	```python
+	def get_target_price(code) # 목표가를 구하는 함수
+	```
+	
+
+- 이동평균선 5일 + 10일
+
+  ```python
+  def get_movingaverage(code, window)
+  ```
+
+ETF(상장지수 펀드) 자동매매(주식 보다 판매 수수료가 저렴)
+
+LP(유동성 공급자) 활동 기간: 0905 ~ 1520
+
+자동매매 시간: 0905 ~ 1515
+
+주문 호가
+
+- 최유리
+  - 당장 가장 유리하게 매매할 수 있는 가격
+- 최호가
+  - 우선 대기하는 가격
+
+주문 조건
+
+- IOC
+  - 체결 후 남은 수량 취소
+- FOK
+  - 전량 체결되지 않으면 주문 자체를 취소
+
+최유리 + FOK
+
+자동스케줄러 사용(프로그램 자동시작, 종료)
+
+- 새 작업 만들기
 
 
-## 환경설정
+
+## 프로젝트 환경 설정
 
 ### 1. 크레온 HTS 설치 (+계좌개설)
 
@@ -21,6 +62,8 @@
 - 대신증권 크레온 로그인(https://www.creontrade.com/) → 고객라운지 →  → 트레이딩 안내 → 다운로드 센터 → CREON HTS 다운로드 → 설치 
 - 크레온 실행 → creon plus 로그인
 - CreonPlus 실행 → 트레이로 실행된 CreonPlus Start 우클릭 → 주문 오브젝트 사용 동의 → 주문 내역 확인 설정 → 주문내역 확인 **체크 해제**    
+
+
 
 ### 2. 파이썬 설치 & 라이브러리 세팅
 
@@ -85,4 +128,146 @@
   ```
 
   실행 방법: 터미널 입력 ``python test.py``
+
+
+
+## Slack Bot 만들기
+### Slack 환경 설정
+#### 1. 워크스페이스 만들기
+- slack 홈페이지(https://slack.com/intl/ko-kr/) 좌측 상단의 **SLACK 실행** 클릭 → 새 워크스페이스 생성
+
+#### 2. slack-bot
+
+- slack api 접속(https://api.slack.com/) → **Create a custom app** 클릭
+- Slack App의 이름과 워크스페이스 지정 후 **Create App** 클릭
+- **Your Apps**에 내가 만든 봇의 **Basic Infomation** 좌측의 **OAuth & Permissions** 클릭 → **Bot Token Scopes**에서 권한을 설정
+  - **Add an OAuth Scope** 클릭 → **chat:write** 권한 설정 → 상단의 **Install to Workspace** 클릭(허용)
+- 워크스페이스에서 만든 채널 - 세부정보(느낌표) - 더보기 - 앱추가 → 만든 봇을 추가
+
+
+
+### 파이썬 Slacker 라이브러리
+
+#### 1. Slacker 라이브러리
+
+- slacker git 접속(https://github.com/os/slacker)
+
+- 터미널을 사용한 설치: ``pip install slacker``, ``pip install requests``
+
+- requests를 활용한 예제
+
+  ```python
+  import requests
+   
+  def post_message(token, channel, text):
+      response = requests.post("https://slack.com/api/chat.postMessage",
+          headers={"Authorization": "Bearer "+token},
+          data={"channel": channel,"text": text}
+      )
+      print(response)
+   
+  myToken = "<your-slack-api-token-goes-here>"
+  
+  # Send a message to your channel 
+  post_message(myToken,"<your-slack-chat-channel>", "Hello! World!")
+  ```
+
+  출처: https://developerdk.tistory.com/96
+
+
+
+## 관련 소스코드
+
+### CREON Plus API
+
+#### 1. 주식정보 가져오기
+
+- 소스코드 (출처: https://money2.creontrade.com/e5/mboard/ptype_basic/plusPDS/DW_Basic_Read.aspx?boardseq=299&seq=41&page=3&searchString=&prd=&lang=7&p=8833&v=8639&m=9505)
+
+  ```python
+  import win32com.client
+   
+  # 연결 여부 체크
+  objCpCybos = win32com.client.Dispatch("CpUtil.CpCybos")
+  bConnect = objCpCybos.IsConnect
+  if (bConnect == 0):
+      print("PLUS가 정상적으로 연결되지 않음. ")
+      exit()
+   
+  # 현재가 객체 구하기
+  objStockMst = win32com.client.Dispatch("DsCbo1.StockMst")
+  objStockMst.SetInputValue(0, 'A005930')   #종목 코드 - 삼성전자
+  objStockMst.BlockRequest()
+   
+  # 현재가 통신 및 통신 에러 처리 
+  rqStatus = objStockMst.GetDibStatus()
+  rqRet = objStockMst.GetDibMsg1()
+  print("통신상태", rqStatus, rqRet)
+  if rqStatus != 0:
+      exit()
+   
+  # 현재가 정보 조회
+  code = objStockMst.GetHeaderValue(0)  #종목코드
+  name= objStockMst.GetHeaderValue(1)  # 종목명
+  time= objStockMst.GetHeaderValue(4)  # 시간
+  cprice= objStockMst.GetHeaderValue(11) # 종가
+  diff= objStockMst.GetHeaderValue(12)  # 대비
+  open= objStockMst.GetHeaderValue(13)  # 시가
+  high= objStockMst.GetHeaderValue(14)  # 고가
+  low= objStockMst.GetHeaderValue(15)   # 저가
+  offer = objStockMst.GetHeaderValue(16)  #매도호가
+  bid = objStockMst.GetHeaderValue(17)   #매수호가
+  vol= objStockMst.GetHeaderValue(18)   #거래량
+  vol_value= objStockMst.GetHeaderValue(19)  #거래대금
+   
+  # 예상 체결관련 정보
+  exFlag = objStockMst.GetHeaderValue(58) #예상체결가 구분 플래그
+  exPrice = objStockMst.GetHeaderValue(55) #예상체결가
+  exDiff = objStockMst.GetHeaderValue(56) #예상체결가 전일대비
+  exVol = objStockMst.GetHeaderValue(57) #예상체결수량
+   
+   
+  print("코드", code)
+  print("이름", name)
+  print("시간", time)
+  print("종가", cprice)
+  print("대비", diff)
+  print("시가", open)
+  print("고가", high)
+  print("저가", low)
+  print("매도호가", offer)
+  print("매수호가", bid)
+  print("거래량", vol)
+  print("거래대금", vol_value)
+   
+   
+  if (exFlag == ord('0')):
+      print("장 구분값: 동시호가와 장중 이외의 시간")
+  elif (exFlag == ord('1')) :
+      print("장 구분값: 동시호가 시간")
+  elif (exFlag == ord('2')):
+      print("장 구분값: 장중 또는 장종료")
+   
+  print("예상체결가 대비 수량")
+  print("예상체결가", exPrice)
+  print("예상체결가 대비", exDiff)
+  print("예상체결수량", exVol)
+  ```
+
+
+
+
+### TRADE
+
+#### 1. GitHub 
+
+- github: https://github.com/INVESTAR/StockAnalysisInPython/blob/master/08_Volatility_Breakout/ch08_03_EtfAlgoTrader.py
+
+
+
+### CREON Plus 자동 로그인
+
+#### 1. GitHub
+
+- github: https://github.com/INVESTAR/StockAnalysisInPython/blob/master/08_Volatility_Breakout/ch08_01_AutoConnect.py
 
